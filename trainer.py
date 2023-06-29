@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 import torch
 
-from models.models import KnapsackExtractWeightsCostFromEmbeddingMLP, baseline_mlp_dict
+from models.models import KnapsackExtractWeightsCostFromEmbeddingMLP, baseline_mlp_dict, KnapsackExtractWeightsFromFeatures
 from models.modules import get_solver_module, StaticConstraintModule, CvxpyModule, CombOptNetModule
 from utils.utils import loss_from_string, optimizer_from_string, set_seed, AvgMeters, compute_metrics, \
     knapsack_round, compute_normalized_solution, compute_denormalized_solution, solve_unconstrained
@@ -11,7 +11,8 @@ from utils.utils import loss_from_string, optimizer_from_string, set_seed, AvgMe
 def get_trainer(trainer_name, **trainer_params):
     trainer_dict = dict(MLPTrainer=MLPBaselineTrainer,
                         KnapsackConstraintLearningTrainer=KnapsackConstraintLearningTrainer,
-                        RandomConstraintLearningTrainer=RandomConstraintLearningTrainer)
+                        RandomConstraintLearningTrainer=RandomConstraintLearningTrainer,
+                        KnapsackWeightsLearningTrainer=KnapsackWeightsLearningTrainer)
     return trainer_dict[trainer_name](**trainer_params)
 
 
@@ -147,6 +148,26 @@ class KnapsackConstraintLearningTrainer(ConstraintLearningTrainerBase):
     def forward(self, x):
         cost_vector, constraints = self.backbone_module(x)
         cost_vector = cost_vector / torch.norm(cost_vector, p=2, dim=-1, keepdim=True)
+
+        y_denorm = self.solver_module(cost_vector=cost_vector, constraints=constraints)
+        if isinstance(self.solver_module, CvxpyModule):
+            y_denorm_rounded = knapsack_round(y_denorm=y_denorm, constraints=constraints,
+                                              knapsack_capacity=self.backbone_module.knapsack_capacity)
+        else:
+            y_denorm_rounded = y_denorm
+        return y_denorm, y_denorm_rounded, {}, cost_vector
+
+
+class KnapsackWeightsLearningTrainer(ConstraintLearningTrainerBase):
+    def build_model(self, solver_module_params, backbone_module_params):
+        self.backbone_module = KnapsackExtractWeightsFromFeatures(**backbone_module_params).to(self.device)
+        self.solver_module = get_solver_module(variable_range=self.variable_range,
+                                               **solver_module_params).to(self.device)
+        model_parameters = list(self.backbone_module.parameters()) + list(self.solver_module.parameters())
+        return model_parameters
+
+    def forward(self, x, cost_vector):
+        constraints = self.backbone_module(x)
 
         y_denorm = self.solver_module(cost_vector=cost_vector, constraints=constraints)
         if isinstance(self.solver_module, CvxpyModule):

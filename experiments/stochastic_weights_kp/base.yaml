@@ -9,10 +9,12 @@
 
 "data_params":
   "base_dataset_path": "data/datasets" # Add correct dataset path here ".../datasets"
-  "dataset_type": "knapsack"
+  "dataset_type": "stochastic_weights_kp"
   "loader_params":
     "batch_size": 8
     "shuffle": true
+  "num_items": 50
+  "seed": 0
 
 "train_epochs": 100
 "eval_every": 10

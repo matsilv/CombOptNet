@@ -1,5 +1,6 @@
 import os
 import sys
+from sklearn.model_selection import train_test_split
 
 import numpy as np
 import torch
@@ -13,7 +14,9 @@ from utils.utils import compute_normalized_solution, save_pickle, load_pickle, A
 
 def load_dataset(dataset_type, base_dataset_path, **dataset_params):
     dataset_path = os.path.join(base_dataset_path, dataset_type)
-    dataset_loader_dict = dict(static_constraints=static_constraint_dataloader, knapsack=knapsack_dataloader)
+    dataset_loader_dict = dict(static_constraints=static_constraint_dataloader,
+                               knapsack=knapsack_dataloader,
+                               stochastic_weights_kp=stochastic_weights_kp_dataloader)
     return dataset_loader_dict[dataset_type](dataset_path=dataset_path, **dataset_params)
 
 
@@ -51,6 +54,35 @@ def knapsack_dataloader(dataset_path, loader_params):
     test_encodings = np.load(os.path.join(dataset_path, 'test_encodings.npy'))
     test_ys = compute_normalized_solution(np.load(os.path.join(dataset_path, 'test_sols.npy')), **variable_range)
     test_dataset = list(zip(test_encodings, test_ys))
+    test_set = Dataset(test_dataset)
+    test_iterator = data.DataLoader(test_set, **loader_params)
+
+    distinct_ys_train = len(set([tuple(y) for y in train_ys]))
+    distinct_ys_test = len(set([tuple(y) for y in test_ys]))
+    print(f'Successfully loaded Knapsack dataset.\n'
+          f'Number of distinct solutions in train set: {distinct_ys_train},\n'
+          f'Number of distinct solutions in test set: {distinct_ys_test}')
+
+    metadata = {"variable_range": variable_range,
+                "num_variables": num_variables}
+
+    return (train_iterator, test_iterator), metadata
+
+
+def stochastic_weights_kp_dataloader(dataset_path, loader_params, num_items, seed):
+    dataset_path = os.path.join(dataset_path, f'seed-{seed}')
+
+    variable_range = dict(lb=0, ub=1)
+    num_variables = num_items
+
+    features = np.load(os.path.join(dataset_path, 'features.npy'))
+    ys = compute_normalized_solution(np.load(os.path.join(dataset_path, 'solutions.npy')), **variable_range)
+    train_features, test_features, train_ys, test_ys = train_test_split(features, ys, test_size=0.2)
+    train_dataset = list(zip(train_features, train_ys))
+    training_set = Dataset(train_dataset)
+    train_iterator = data.DataLoader(training_set, **loader_params)
+
+    test_dataset = list(zip(test_features, test_ys))
     test_set = Dataset(test_dataset)
     test_iterator = data.DataLoader(test_set, **loader_params)
 

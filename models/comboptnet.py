@@ -1,11 +1,11 @@
 import warnings
-
-import gurobipy as gp
+from ortools.linear_solver import pywraplp
 import jax.numpy as jnp
 import numpy as np
 import torch
-from gurobipy import GRB, quicksum
 from jax import grad
+import sys
+import os
 
 from utils.comboptnet_utils import compute_delta_y, check_point_feasibility, softmin, \
     signed_euclidean_distance_constraint_point, tensor_to_jax
@@ -116,7 +116,7 @@ def ilp_solver(cost_vector, constraints, lb, ub):
     A, b = constraints[:, :-1], constraints[:, -1]
     num_constraints, num_variables = A.shape
 
-    model = gp.Model("mip1")
+    """model = gp.Model("mip1")
     model.setParam('OutputFlag', 0)
     model.setParam("Threads", 1)
 
@@ -124,9 +124,34 @@ def ilp_solver(cost_vector, constraints, lb, ub):
     model.setObjective(quicksum(c * var for c, var in zip(cost_vector, variables)), GRB.MINIMIZE)
     for a, _b in zip(A, b):
         model.addConstr(quicksum(c * var for c, var in zip(a, variables)) + _b <= 0)
-    model.optimize()
+    model.optimize()"""
+
+    # Redirect stderr to null device
+    solver = pywraplp.Solver.CreateSolver('SCIP')
+
+    variables = [solver.IntVar(lb=lb, ub=ub, name='v' + str(i)) for i in range(num_variables)]
+    objective = solver.Objective()
+    for c, var in zip(cost_vector, variables):
+        objective.SetCoefficient(var, float(c))
+    objective.SetMinimization()
+
+    for a, _b in zip(A, b):
+        constraint = solver.Constraint(-solver.infinity(), -float(_b))
+        for c, var in zip(a, variables):
+            constraint.SetCoefficient(var, float(c))
+
+    status = solver.Solve()
+
+    """if status == pywraplp.Solver.OPTIMAL:
+        print('Optimal solution found')
+        print('Objective value =', solver.Objective().Value())
+        for i, var in enumerate(variables):
+            print('v{} = {}'.format(i, var.solution_value()))
+    else:
+        print('The problem does not have an optimal solution.')"""
+
     try:
-        y = np.array([v.x for v in model.getVars()])
+        y = np.array([var.solution_value() for var in variables])
         infeasible = False
     except AttributeError:
         warnings.warn(f'Infeasible ILP encountered. Dummy solution should be handled as special case.')
