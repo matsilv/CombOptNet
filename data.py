@@ -20,6 +20,7 @@ def load_dataset(dataset_type, base_dataset_path, **dataset_params):
     return dataset_loader_dict[dataset_type](dataset_path=dataset_path, **dataset_params)
 
 
+# FIXME: not tested
 def static_constraint_dataloader(dataset_path, dataset_specification, num_gt_variables, num_gt_constraints,
                                  dataset_seed, train_dataset_size, loader_params):
     dataset_path = os.path.join(dataset_path, dataset_specification, str(num_gt_variables) + '_dim',
@@ -41,6 +42,7 @@ def static_constraint_dataloader(dataset_path, dataset_specification, num_gt_var
     return (train_iterator, test_iterator), datasets['metadata']
 
 
+# FIXME: not tested
 def knapsack_dataloader(dataset_path, loader_params):
     variable_range = dict(lb=0, ub=1)
     num_variables = 10
@@ -69,7 +71,7 @@ def knapsack_dataloader(dataset_path, loader_params):
     return (train_iterator, test_iterator), metadata
 
 
-def stochastic_weights_kp_dataloader(dataset_path, loader_params, num_items, seed):
+def stochastic_weights_kp_dataloader(dataset_path, loader_params, num_items, seed, rnd_split_seed):
     dataset_path = os.path.join(dataset_path, f'seed-{seed}')
 
     variable_range = dict(lb=0, ub=1)
@@ -77,10 +79,24 @@ def stochastic_weights_kp_dataloader(dataset_path, loader_params, num_items, see
 
     features = np.load(os.path.join(dataset_path, 'features.npy'))
     ys = compute_normalized_solution(np.load(os.path.join(dataset_path, 'solutions.npy')), **variable_range)
-    train_features, test_features, train_ys, test_ys = train_test_split(features, ys, test_size=0.2)
+    weights = np.load(os.path.join(dataset_path, 'weights.npy'))
+    values = np.load(os.path.join(dataset_path, 'values.npy'))
+
+    capacity = np.load(os.path.join(dataset_path, 'capacity.npy'))
+    tiled_capacity = np.expand_dims(np.expand_dims(capacity, 0), axis=1)
+    tiled_capacity = np.tile(tiled_capacity, (len(features), 1))
+    features = np.concatenate((features, values, weights, tiled_capacity), axis=1)
+    capacity = capacity.item()
+
+    train_features, test_features, \
+    train_ys, test_ys, train_weights, _ = \
+        train_test_split(features, ys, weights, test_size=0.2, random_state=rnd_split_seed)
     train_dataset = list(zip(train_features, train_ys))
     training_set = Dataset(train_dataset)
     train_iterator = data.DataLoader(training_set, **loader_params)
+
+    min_weight = np.min(train_weights)
+    max_weight = np.max(train_weights)
 
     test_dataset = list(zip(test_features, test_ys))
     test_set = Dataset(test_dataset)
@@ -93,7 +109,10 @@ def stochastic_weights_kp_dataloader(dataset_path, loader_params, num_items, see
           f'Number of distinct solutions in test set: {distinct_ys_test}')
 
     metadata = {"variable_range": variable_range,
-                "num_variables": num_variables}
+                "num_variables": num_variables,
+                "capacity": capacity,
+                "min_weight": min_weight,
+                "max_weight": max_weight}
 
     return (train_iterator, test_iterator), metadata
 
@@ -109,6 +128,7 @@ class Dataset(data.Dataset):
         x, y = [torch.from_numpy(_x) for _x in self.dataset[index]]
         return x, y
 
+# FIXME: not tested
 
 def gen_constraints_dataset(train_dataset_size, test_dataset_size, seed, variable_range, num_variables,
                             num_constraints, positive_costs, constraint_params):
@@ -146,6 +166,7 @@ def gen_constraints_dataset(train_dataset_size, test_dataset_size, seed, variabl
     return datasets, metrics
 
 
+# FIXME: not tested
 def main(working_dir, num_seeds, num_constraints, num_variables, data_gen_params):
     avg_meter = AvgMeters()
     all_metrics = {}

@@ -4,9 +4,12 @@
 
 "trainer_params":
   "trainer_name": "KnapsackWeightsLearningTrainer"
+  "penalty": 10
 
   "model_params":
     "backbone_module_params":
+      "in_features": 5
+      "out_features": 50
 
     "solver_module_params":
       "solver_name": "CombOptNet"

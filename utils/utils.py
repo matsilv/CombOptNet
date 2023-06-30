@@ -71,6 +71,7 @@ def compute_metrics(y, y_true, y_uncon=None, prefix='', acc_threshold=1e-5):
 
     y_true = y_true.cpu().detach().numpy()
     correct, correct_perfect = check_equal_ys(y, y_true, threshold=acc_threshold)
+
     metric_dict.update(dict(acc=correct, perfect_accuracy=correct_perfect))
 
     if y_uncon is not None:
@@ -322,13 +323,18 @@ def sample_at_least_one_of_each(subsets, num_classes, num_samples, num_iteration
 
 def print_eval_acc(metrics):
     print(f"Evaluation:: Loss: {metrics['eval_loss']:.4f}, "
-          f"Perfect acc: {metrics['eval_perfect_accuracy']:.4f}")
+          f"Perfect acc: {metrics['eval_perfect_accuracy']:.4f}, "
+          f"Relative regret: {metrics['eval_rel_regret']:.4f}, "
+          f"Relative suboptimality regret: {metrics['eval_subopt_rel_regret']:.4f}, "
+          f"Infeasibility ratio: {metrics['eval_infeas_ratio']:.4f}")
 
 
 def print_train_acc(metrics, epoch):
     print(f"Epoch: {epoch + 1:>2}, Train loss: {metrics['train_loss']:.4f}, "
-          f"Perfect acc: {metrics['train_perfect_accuracy']:.4f}")
-
+          f"Perfect acc: {metrics['train_perfect_accuracy']:.4f}, "
+          f"Relative regret: {metrics['train_rel_regret']}, "
+          f"Relative suboptimality regret: {metrics['train_subopt_rel_regret']:.4f}, "
+          f"Infeasibility ratio: {metrics['train_infeas_ratio']:.4f}")
 
 def save_dict_as_one_line_csv(dct, filename):
     os.makedirs(os.path.dirname(filename), exist_ok=True)

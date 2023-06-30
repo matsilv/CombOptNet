@@ -5,10 +5,10 @@ import torch.nn as nn
 class LinearModel(torch.nn.Module):
     def __init__(self, out_features, in_features):
         super().__init__()
-        self.layer = nn.Linear(in_features=in_features, out_features=out_features)
+        self.fc1 = nn.Linear(in_features=in_features, out_features=out_features)
 
     def forward(self, x):
-        x = self.layer(x.float())
+        x = self.fc1(x.float())
         return x
 
 
@@ -26,6 +26,7 @@ class MLP(torch.nn.Module):
         return x
 
 
+# FIXME: not tested
 class KnapsackMLP(MLP):
     """
     Predicts normalized solution y (range [-0.5, 0.5])
@@ -45,6 +46,7 @@ class KnapsackMLP(MLP):
         return y_norm
 
 
+# FIXME: not tested
 class RandomConstraintsMLP(MLP):
     """
     Predicts normalized solution y (range [-0.5, 0.5])
@@ -60,6 +62,7 @@ class RandomConstraintsMLP(MLP):
         return y_norm
 
 
+# FIXME: not tested
 class KnapsackExtractWeightsCostFromEmbeddingMLP(MLP):
     """
     Extracts weights and prices of vector-embedding of Knapsack instance
@@ -101,24 +104,28 @@ class KnapsackExtractWeightsFromFeatures(LinearModel):
              torch.Tensor of shape (bs, num_constraints, num_variables + 1) with extracted weights and negative knapsack capacity
     """
 
-    def __init__(self, num_constraints=1, embed_dim=4096, knapsack_capacity=1.0, weight_min=0.15, weight_max=0.35,
+    def __init__(self, kp_dim, embed_dim, knapsack_capacity, weight_min, weight_max, out_features,
                  **kwargs):
-        self.num_constraints = num_constraints
+        self._kp_dim = kp_dim
 
         self.knapsack_capacity = knapsack_capacity
         self.weight_min = weight_min
         self.weight_range = weight_max - weight_min
 
-        super().__init__(in_features=embed_dim, out_features=num_constraints + 1, **kwargs)
+        super().__init__(in_features=embed_dim, out_features=out_features, **kwargs)
 
     def forward(self, x):
         x = super().forward(x)
         batch_size = x.shape[0]
-        As = x.split([1, self.num_constraints], dim=-1)
-        As = As.transpose(1, 2)
+
+        assert x.shape[1] == self._kp_dim
+
+        As = x[:, :self._kp_dim]
         As = self.weight_min + self.weight_range * As
-        bs = -torch.ones(batch_size, self.num_constraints).to(As.device) * self.knapsack_capacity
-        constraints = torch.cat([As, bs[..., None]], dim=-1)
+        # FIXME: the size of b should not hardcoded
+        bs = -torch.ones(batch_size, 1).to(As.device) * self.knapsack_capacity
+        constraints = torch.cat([As, bs], dim=-1)
+        constraints = constraints.unsqueeze(dim=1)
         return constraints
 
 
